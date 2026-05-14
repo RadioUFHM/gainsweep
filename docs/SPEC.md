@@ -564,7 +564,7 @@ class BacktestResult:
 **CLI usage:**
 
 ```shell
-python -m merchant_sweep.backtest \
+python -m gainsweep.backtest \
   --tokens ETH,MATIC,SOL \
   --start 2025-01-01 \
   --end 2026-01-01 \

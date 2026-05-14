@@ -54,14 +54,14 @@ ruff format . && ruff check --fix .
 mypy src/
 
 # Run a backtest (once Phase 5 is built)
-python -m merchant_sweep.backtest --help
+python -m gainsweep.backtest --help
 ```
 
 ## What's where
 
 ```
 docs/SPEC.md          The design spec. Read this first.
-src/merchant_sweep/   Application code.
+src/gainsweep/   Application code.
 tests/                Tests, mirroring src/ layout.
 migrations/           Alembic DB migrations.
 scripts/              One-off scripts and dev tooling.

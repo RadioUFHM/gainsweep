@@ -1,4 +1,4 @@
-# merchant-sweep
+# gainsweep
 
 Back-end service that tracks daily high prices of cryptocurrency tokens held in merchant wallets and alerts merchants when prices drop below configurable thresholds, offering one-tap conversion into a designated stablecoin.
 

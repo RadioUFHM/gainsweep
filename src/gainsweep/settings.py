@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Database
-    database_url: str = "postgresql+asyncpg://localhost/merchant_sweep"
+    database_url: str = "postgresql+asyncpg://localhost/gainsweep"
 
     # Price provider (§5.1)
     price_provider: str = "coingecko_free"
