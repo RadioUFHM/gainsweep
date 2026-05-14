@@ -23,8 +23,8 @@ A swappable `PriceProvider` polls prices (MVP: CoinGecko). A `DailyHighTracker` 
 See [`CLAUDE.md`](http://CLAUDE.md) for conventions and workflow.
 
 ```shell
-git clone git@github.com:YOUR_USERNAME/merchant-sweep.git
-cd merchant-sweep
+git clone git@github.com:RadioUFHM/gainsweep.git
+cd gainsweep
 pip install -e ".[dev]"
 pytest
 ```
