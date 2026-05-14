@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from gainsweep.db.models import AlertState
+from gainsweep.db.models import AlertKind, AlertResponse, AlertState
 
 
 @dataclass
@@ -55,6 +55,23 @@ class SnapshotData:
     snooze_trigger_price: Decimal | None = field(default=None)
     last_alert_id: uuid.UUID | None = field(default=None)
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+@dataclass
+class AlertData:
+    """In-memory representation of an Alert row. (§4.1)"""
+
+    id: uuid.UUID
+    merchant_id: uuid.UUID
+    snapshot_merchant_id: uuid.UUID
+    snapshot_token_symbol: str
+    snapshot_date: date
+    kind: AlertKind
+    fired_at: datetime
+    payload: dict[str, object]
+    response: AlertResponse | None = field(default=None)
+    responded_at: datetime | None = field(default=None)
+    resulting_sweep_id: uuid.UUID | None = field(default=None)
 
 
 @dataclass
