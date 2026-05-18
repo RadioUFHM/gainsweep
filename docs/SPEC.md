@@ -194,9 +194,10 @@ class PriceProvider(Protocol):
 - Free tier; \~10-30 calls/min rate limit (verify current limits at integration time)  
 - Use `simple/price` endpoint for `get_batch`  
 - Use `coins/{id}/market_chart/range` for historical  
-- Maintain a symbol→coingecko\_id mapping table (token symbols are not unique on CoinGecko)  
+- Maintain a symbol→coingecko\_id mapping table (token symbols are not unique on CoinGecko); Phase 1 ships a hardcoded dict of common tokens; Phase 2+ may move this to the DB  
 - Cache responses for 30 seconds to stay under rate limits  
-- Fail open: if the provider returns an error, log it and skip this tick; do not crash the tracker
+- Fail open: if the provider returns an error, log it and skip this tick; do not crash the tracker  
+- **Hourly granularity constraint:** `market_chart/range` returns hourly data only for ranges ≤ 90 days. For longer back-test windows, `get_historical_hourly` chunks requests into ≤ 89-day slices automatically.
 
 **Configuration:**
 
@@ -430,12 +431,15 @@ class SweepVenue(Protocol):
 - Sweep \= market sell against the `{TOKEN}-{STABLECOIN}` pair (e.g., `ETH-USDC`)  
 - If pair doesn't exist, attempt `{TOKEN}-USD` then convert USD→stablecoin in a second leg  
 - Slippage protection: reject execution if `estimate` shows \>2% slippage; surface to merchant as a different alert  
-- Pre-execution check: confirm balance ≥ qty (handles race conditions where balance changed since snapshot)
+- Pre-execution check: confirm balance ≥ qty (handles race conditions where balance changed since snapshot)  
+- **Authentication:** Coinbase Advanced Trade API (CDP) uses per-request JWT tokens signed with ES256. The JWT `kid` is the API key name; the signing key is the PEM private key from the secrets manager. JWT generation is implemented in Phase 4.
 
 **Configuration:**
 
 ```
-COINBASE_API_BASE=https://api.coinbase.com
+COINBASE_ENV=sandbox          # default; set to "production" to target live API
+                              # sandbox base: https://api-sandbox.coinbase.com
+                              # production base: https://api.coinbase.com
 COINBASE_RATE_LIMIT_RPS=10
 SWEEP_MAX_SLIPPAGE_PCT=2.0
 ```
@@ -560,7 +564,7 @@ class BacktestResult:
 **CLI usage:**
 
 ```shell
-python -m merchant_sweep.backtest \
+python -m gainsweep.backtest \
   --tokens ETH,MATIC,SOL \
   --start 2025-01-01 \
   --end 2026-01-01 \
