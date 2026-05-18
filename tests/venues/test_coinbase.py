@@ -119,19 +119,101 @@ def test_get_supported_tokens_handles_missing_base_currency_id() -> None:
     assert tokens == {"ETH"}
 
 
-# ── Phase 4 stubs ─────────────────────────────────────────────────────────────
+# ── estimate_sweep ────────────────────────────────────────────────────────────
+
+_BEST_BID_ASK_PATH = "/api/v3/brokerage/best_bid_ask"
 
 
-def test_estimate_sweep_raises_not_implemented() -> None:
+@respx.mock
+def test_estimate_sweep_returns_estimate() -> None:
+    respx.get(f"{_SANDBOX_BASE_URL}{_BEST_BID_ASK_PATH}").mock(
+        return_value=httpx.Response(200, json={
+            "pricebooks": [{
+                "product_id": "ETH-USDC",
+                "bids": [{"price": "3200.00", "size": "5.0"}],
+                "asks": [{"price": "3201.00", "size": "5.0"}],
+            }]
+        })
+    )
     venue = _make_venue()
-    with pytest.raises(NotImplementedError):
-        venue.estimate_sweep(uuid4(), "ETH", Decimal("1.0"), "USDC")
+    est = venue.estimate_sweep(uuid4(), "ETH", Decimal("2"), "USDC")
+
+    assert est.venue == "coinbase"
+    assert est.expected_proceeds == Decimal("2") * Decimal("3200.00")
+    assert est.estimated_fees == est.expected_proceeds * Decimal("0.006")
+    assert est.estimated_slippage_pct > 0.0
+    assert est.estimated_completion_seconds == 5
 
 
-def test_execute_sweep_raises_not_implemented() -> None:
+@respx.mock
+def test_estimate_sweep_raises_on_http_error() -> None:
+    respx.get(f"{_SANDBOX_BASE_URL}{_BEST_BID_ASK_PATH}").mock(
+        return_value=httpx.Response(503)
+    )
     venue = _make_venue()
-    with pytest.raises(NotImplementedError):
-        venue.execute_sweep(uuid4(), "ETH", Decimal("1.0"), "USDC")
+    with pytest.raises(RuntimeError, match="estimate_sweep failed"):
+        venue.estimate_sweep(uuid4(), "ETH", Decimal("1"), "USDC")
+
+
+@respx.mock
+def test_estimate_sweep_raises_on_empty_pricebook() -> None:
+    respx.get(f"{_SANDBOX_BASE_URL}{_BEST_BID_ASK_PATH}").mock(
+        return_value=httpx.Response(200, json={"pricebooks": []})
+    )
+    venue = _make_venue()
+    with pytest.raises(RuntimeError, match="no bid data"):
+        venue.estimate_sweep(uuid4(), "ETH", Decimal("1"), "USDC")
+
+
+# ── execute_sweep ─────────────────────────────────────────────────────────────
+
+_ORDERS_PATH = "/api/v3/brokerage/orders"
+
+
+@respx.mock
+def test_execute_sweep_returns_complete_on_success() -> None:
+    respx.post(f"{_SANDBOX_BASE_URL}{_ORDERS_PATH}").mock(
+        return_value=httpx.Response(200, json={
+            "success": True,
+            "success_response": {"order_id": "order-abc-123", "product_id": "ETH-USDC"},
+        })
+    )
+    venue = _make_venue()
+    result = venue.execute_sweep(uuid4(), "ETH", Decimal("2"), "USDC")
+
+    assert result.status == "COMPLETE"
+    assert result.venue_txn_ids == ["order-abc-123"]
+    assert result.token_symbol == "ETH"
+    assert result.target_stablecoin == "USDC"
+    assert result.error_message is None
+
+
+@respx.mock
+def test_execute_sweep_returns_failed_on_http_error() -> None:
+    respx.post(f"{_SANDBOX_BASE_URL}{_ORDERS_PATH}").mock(
+        return_value=httpx.Response(400, text="Bad Request")
+    )
+    venue = _make_venue()
+    result = venue.execute_sweep(uuid4(), "ETH", Decimal("1"), "USDC")
+
+    assert result.status == "FAILED"
+    assert result.error_message is not None
+    assert result.venue_txn_ids == []
+
+
+@respx.mock
+def test_execute_sweep_returns_failed_when_success_false() -> None:
+    respx.post(f"{_SANDBOX_BASE_URL}{_ORDERS_PATH}").mock(
+        return_value=httpx.Response(200, json={
+            "success": False,
+            "error_response": {"message": "insufficient funds"},
+        })
+    )
+    venue = _make_venue()
+    result = venue.execute_sweep(uuid4(), "ETH", Decimal("999"), "USDC")
+
+    assert result.status == "FAILED"
+    assert result.error_message == "insufficient funds"
 
 
 # ── _auth_headers ─────────────────────────────────────────────────────────────
