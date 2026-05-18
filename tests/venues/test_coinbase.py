@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 from decimal import Decimal
+from unittest.mock import patch
 from uuid import uuid4
 
 import httpx
@@ -15,9 +17,13 @@ from gainsweep.venues.coinbase import (
 
 _PRODUCTS_PATH = "/api/v3/brokerage/products"
 
+# 32 bytes of key material, base64-encoded — valid for HMAC tests
+_TEST_SECRET = base64.b64encode(b"x" * 32).decode()
+_TEST_KEY_NAME = "projects/proj-abc/apiKeys/key-uuid-1234"
+
 
 def _make_venue(env: str = "sandbox", **kwargs: object) -> CoinbaseSweepVenue:
-    return CoinbaseSweepVenue("test-key", "test-pem", env=env, **kwargs)  # type: ignore[arg-type]
+    return CoinbaseSweepVenue(_TEST_KEY_NAME, _TEST_SECRET, env=env, **kwargs)  # type: ignore[arg-type]
 
 
 # ── instantiation and URL selection ──────────────────────────────────────────
@@ -126,3 +132,53 @@ def test_execute_sweep_raises_not_implemented() -> None:
     venue = _make_venue()
     with pytest.raises(NotImplementedError):
         venue.execute_sweep(uuid4(), "ETH", Decimal("1.0"), "USDC")
+
+
+# ── _auth_headers ─────────────────────────────────────────────────────────────
+
+
+def test_auth_headers_contains_required_fields() -> None:
+    venue = _make_venue()
+    with patch("gainsweep.venues.coinbase.time") as mock_time:
+        mock_time.time.return_value = 1716652800.0
+        headers = venue._auth_headers("GET", "/api/v3/brokerage/products")
+    assert headers["CB-ACCESS-KEY"] == "key-uuid-1234"
+    assert headers["CB-ACCESS-TIMESTAMP"] == "1716652800"
+    assert len(headers["CB-ACCESS-SIGN"]) == 64  # SHA256 hex digest
+
+
+def test_auth_headers_extracts_key_id_from_full_path() -> None:
+    venue = CoinbaseSweepVenue(
+        "projects/proj-xyz/apiKeys/my-key-uuid", _TEST_SECRET
+    )
+    with patch("gainsweep.venues.coinbase.time") as mock_time:
+        mock_time.time.return_value = 1716652800.0
+        headers = venue._auth_headers("GET", "/api/v3/brokerage/products")
+    assert headers["CB-ACCESS-KEY"] == "my-key-uuid"
+
+
+def test_auth_headers_signature_is_deterministic() -> None:
+    venue = _make_venue()
+    with patch("gainsweep.venues.coinbase.time") as mock_time:
+        mock_time.time.return_value = 1716652800.0
+        h1 = venue._auth_headers("GET", "/api/v3/brokerage/products")
+        h2 = venue._auth_headers("GET", "/api/v3/brokerage/products")
+    assert h1["CB-ACCESS-SIGN"] == h2["CB-ACCESS-SIGN"]
+
+
+def test_auth_headers_signature_changes_with_method() -> None:
+    venue = _make_venue()
+    with patch("gainsweep.venues.coinbase.time") as mock_time:
+        mock_time.time.return_value = 1716652800.0
+        h_get = venue._auth_headers("GET", "/api/v3/brokerage/products")
+        h_post = venue._auth_headers("POST", "/api/v3/brokerage/products")
+    assert h_get["CB-ACCESS-SIGN"] != h_post["CB-ACCESS-SIGN"]
+
+
+def test_auth_headers_signature_changes_with_body() -> None:
+    venue = _make_venue()
+    with patch("gainsweep.venues.coinbase.time") as mock_time:
+        mock_time.time.return_value = 1716652800.0
+        h_empty = venue._auth_headers("POST", "/api/v3/brokerage/orders")
+        h_body = venue._auth_headers("POST", "/api/v3/brokerage/orders", '{"side":"SELL"}')
+    assert h_empty["CB-ACCESS-SIGN"] != h_body["CB-ACCESS-SIGN"]
