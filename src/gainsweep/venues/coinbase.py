@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import logging
+import time
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -20,7 +24,7 @@ class CoinbaseSweepVenue:
     """SweepVenue backed by Coinbase Advanced Trade API (§5.7).
 
     Phase 1: class structure and get_supported_tokens implemented.
-    Phase 4: estimate_sweep, execute_sweep, and CDP JWT auth.
+    Phase 4: HMAC-SHA256 auth, estimate_sweep, execute_sweep.
 
     Satisfies the SweepVenue protocol; pass as ``venue: SweepVenue``.
     """
@@ -28,12 +32,12 @@ class CoinbaseSweepVenue:
     def __init__(
         self,
         api_key_name: str,
-        private_key_pem: str,
+        api_secret: str,
         env: str = "sandbox",
         client: httpx.Client | None = None,
     ) -> None:
         self._api_key_name = api_key_name
-        self._private_key_pem = private_key_pem
+        self._api_secret = api_secret
         base_url = _PRODUCTION_BASE_URL if env == "production" else _SANDBOX_BASE_URL
         self._client = client or httpx.Client(base_url=base_url, timeout=30.0)
 
@@ -73,11 +77,23 @@ class CoinbaseSweepVenue:
 
     # ── private helpers ───────────────────────────────────────────────────────
 
-    def _auth_headers(self, method: str, path: str) -> dict[str, str]:
-        # Phase 4: generate per-request CDP JWT (ES256).
-        # kid = api_key_name; signed with private_key_pem.
-        # See: https://docs.cdp.coinbase.com/advanced-trade/docs/rest-api-auth
-        return {}
+    def _auth_headers(self, method: str, path: str, body: str = "") -> dict[str, str]:
+        """HMAC-SHA256 auth for Coinbase Advanced Trade API (§5.7).
+
+        Signature covers: timestamp + METHOD + path + body.
+        CB-ACCESS-KEY is the key UUID (last segment of the full key name).
+        """
+        timestamp = str(int(time.time()))
+        api_key_id = self._api_key_name.split("/")[-1]
+        message = timestamp + method.upper() + path + body
+        secret = base64.b64decode(self._api_secret)
+        signature = hmac.new(secret, message.encode("utf-8"), hashlib.sha256).hexdigest()
+        return {
+            "CB-ACCESS-KEY": api_key_id,
+            "CB-ACCESS-SIGN": signature,
+            "CB-ACCESS-TIMESTAMP": timestamp,
+            "Content-Type": "application/json",
+        }
 
 
 # Confirm CoinbaseSweepVenue satisfies SweepVenue at import time

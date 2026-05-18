@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     # Coinbase venue (§5.7)
     # Targets sandbox by default. Set COINBASE_ENV=production to use live API.
     coinbase_env: str = "sandbox"
+    coinbase_key_name: str = ""   # projects/{project_id}/apiKeys/{key_id}
+    coinbase_private_key: str = ""  # base64-encoded HMAC secret
     coinbase_rate_limit_rps: int = 10
     sweep_max_slippage_pct: float = 2.0
 

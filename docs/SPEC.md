@@ -432,7 +432,7 @@ class SweepVenue(Protocol):
 - If pair doesn't exist, attempt `{TOKEN}-USD` then convert USD→stablecoin in a second leg  
 - Slippage protection: reject execution if `estimate` shows \>2% slippage; surface to merchant as a different alert  
 - Pre-execution check: confirm balance ≥ qty (handles race conditions where balance changed since snapshot)  
-- **Authentication:** Coinbase Advanced Trade API (CDP) uses per-request JWT tokens signed with ES256. The JWT `kid` is the API key name; the signing key is the PEM private key from the secrets manager. JWT generation is implemented in Phase 4.
+- **Authentication:** HMAC-SHA256. Each request includes three headers: `CB-ACCESS-KEY` (the API key UUID, extracted as the last path segment of the full key name), `CB-ACCESS-SIGN` (HMAC-SHA256 of `timestamp + METHOD + path + body`, hex-encoded, signed with the base64-decoded API secret), and `CB-ACCESS-TIMESTAMP` (Unix timestamp as a string). The API secret is a base64-encoded value issued by the Coinbase portal.
 
 **Configuration:**
 
@@ -440,6 +440,8 @@ class SweepVenue(Protocol):
 COINBASE_ENV=sandbox          # default; set to "production" to target live API
                               # sandbox base: https://api-sandbox.coinbase.com
                               # production base: https://api.coinbase.com
+COINBASE_KEY_NAME=projects/{project_id}/apiKeys/{key_id}
+COINBASE_PRIVATE_KEY=<base64-encoded API secret from Coinbase portal>
 COINBASE_RATE_LIMIT_RPS=10
 SWEEP_MAX_SLIPPAGE_PCT=2.0
 ```
