@@ -99,7 +99,7 @@ class DailyHighTracker:
         the first tick of the new day doesn't start from zero.
         """
         today = datetime.now(ZoneInfo(tz)).date()
-        prev = self._snapshots.get(merchant_id, token, today - timedelta(days=1))
+        prev = self._snapshots.get_latest(merchant_id, token)
         carry_price = prev.current_price if prev else Decimal("0")
         carry_ts = prev.current_price_ts if prev else datetime.now(timezone.utc)
 

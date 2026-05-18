@@ -19,6 +19,10 @@ class SnapshotRepository(Protocol):
         self, merchant_id: uuid.UUID, token: str, d: date
     ) -> SnapshotData: ...
 
+    def get_latest(
+        self, merchant_id: uuid.UUID, token: str
+    ) -> SnapshotData | None: ...
+
 
 class InMemorySnapshotRepository:
     """In-memory SnapshotRepository used in tests and the backtest harness."""
@@ -46,6 +50,13 @@ class InMemorySnapshotRepository:
         )
         self.save(snapshot)
         return snapshot
+
+    def get_latest(self, merchant_id: uuid.UUID, token: str) -> SnapshotData | None:
+        candidates = [
+            s for s in self._store.values()
+            if s.merchant_id == merchant_id and s.token_symbol == token
+        ]
+        return max(candidates, key=lambda s: s.date) if candidates else None
 
     def all(self) -> list[SnapshotData]:
         return list(self._store.values())
