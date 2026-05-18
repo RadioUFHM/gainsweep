@@ -26,7 +26,7 @@ from gainsweep.repositories.snapshot import InMemorySnapshotRepository
 
 _MID = uuid.uuid4()
 _TOKEN = "ETH"
-_TODAY = date(2024, 5, 14)
+_TODAY = date.today()
 
 
 def _snap(**overrides: object) -> SnapshotData:
