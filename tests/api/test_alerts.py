@@ -195,10 +195,10 @@ def test_respond_snooze_requires_delta_pct(
     assert resp.status_code == 422
 
 
-# ── POST /api/v1/alerts/{id}/respond — SWEEP (Phase 4 stub) ──────────────────
+# ── POST /api/v1/alerts/{id}/respond — SWEEP ─────────────────────────────────
 
 
-def test_respond_sweep_returns_501_until_phase_4(
+def test_respond_sweep_returns_501_when_orchestrator_not_configured(
     client: TestClient, repos: tuple
 ) -> None:
     snap_repo, alert_repo, config_repo = repos
@@ -209,6 +209,54 @@ def test_respond_sweep_returns_501_until_phase_4(
         json={"action": "SWEEP"},
     )
     assert resp.status_code == 501
+
+
+def test_respond_sweep_returns_200_with_sweep_id(repos: tuple) -> None:
+    snap_repo, alert_repo, config_repo = repos
+    alert = _seed_alert(alert_repo, snap_repo, config_repo)
+
+    _SWEEP_ID = uuid.uuid4()
+
+    class _MockOrchestrator:
+        def execute(self, merchant_id, token, qty, triggered_by_alert_id=None, triggered_by_schedule=False):  # type: ignore[override]
+            return _SWEEP_ID
+
+    price_provider = MagicMock()
+    price_provider.get_price.return_value = PriceQuote(
+        symbol="USDC", price=Decimal("1.00"),
+        timestamp=datetime.now(timezone.utc), source="mock",
+    )
+    app = create_app()
+    app.dependency_overrides[deps.get_snapshot_repo] = lambda: snap_repo
+    app.dependency_overrides[deps.get_alert_repo] = lambda: alert_repo
+    app.dependency_overrides[deps.get_config_repo] = lambda: config_repo
+    app.dependency_overrides[deps.get_job_scheduler] = lambda: NoopJobScheduler()
+    app.dependency_overrides[deps.get_sweep_orchestrator] = lambda: _MockOrchestrator()
+
+    from gainsweep.api.routes import alerts as alerts_module
+    original = alerts_module._engine
+
+    def patched_engine(**_):  # type: ignore[misc]
+        from gainsweep.alert.engine import AlertEngine
+        return AlertEngine(
+            snapshot_repo=snap_repo, config_repo=config_repo, alert_repo=alert_repo,
+            price_provider=price_provider, job_scheduler=NoopJobScheduler(),
+            sweep_orchestrator=_MockOrchestrator(),
+        )
+
+    alerts_module._engine = patched_engine  # type: ignore[assignment]
+    try:
+        resp = TestClient(app).post(
+            f"/api/v1/alerts/{alert.id}/respond",
+            json={"action": "SWEEP"},
+        )
+    finally:
+        alerts_module._engine = original  # type: ignore[assignment]
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["sweep_id"] == str(_SWEEP_ID)
+    assert data["snapshot_state"] == "RESOLVED_SWEEP"
 
 
 # ── POST error cases ──────────────────────────────────────────────────────────

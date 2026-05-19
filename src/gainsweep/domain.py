@@ -75,6 +75,28 @@ class AlertData:
 
 
 @dataclass
+class SweepExecutionData:
+    """In-memory representation of a SweepExecution row. (§5.8)"""
+
+    id: uuid.UUID
+    merchant_id: uuid.UUID
+    venue: str
+    token_symbol: str
+    qty_requested: Decimal
+    target_stablecoin: str
+    status: str  # PENDING | COMPLETE | PARTIAL | FAILED
+    triggered_by_alert_id: uuid.UUID | None = field(default=None)
+    triggered_by_schedule: bool = field(default=False)
+    qty_executed: Decimal = field(default=Decimal("0"))
+    proceeds: Decimal = field(default=Decimal("0"))
+    fees_paid: Decimal = field(default=Decimal("0"))
+    venue_txn_ids: list[str] = field(default_factory=list)
+    error_message: str | None = field(default=None)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: datetime | None = field(default=None)
+
+
+@dataclass
 class ConfigData:
     """In-memory representation of a MerchantAlertConfig."""
 
