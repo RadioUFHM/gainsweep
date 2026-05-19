@@ -432,16 +432,15 @@ class SweepVenue(Protocol):
 - If pair doesn't exist, attempt `{TOKEN}-USD` then convert USD→stablecoin in a second leg  
 - Slippage protection: reject execution if `estimate` shows \>2% slippage; surface to merchant as a different alert  
 - Pre-execution check: confirm balance ≥ qty (handles race conditions where balance changed since snapshot)  
-- **Authentication:** HMAC-SHA256. Each request includes three headers: `CB-ACCESS-KEY` (the API key UUID, extracted as the last path segment of the full key name), `CB-ACCESS-SIGN` (HMAC-SHA256 of `timestamp + METHOD + path + body`, hex-encoded, signed with the base64-decoded API secret), and `CB-ACCESS-TIMESTAMP` (Unix timestamp as a string). The API secret is a base64-encoded value issued by the Coinbase portal.
+- **Authentication:** CDP JWT (ES256). Each request carries `Authorization: Bearer <jwt>`. JWT header: `alg=ES256`, `kid=<key_name>`, random `nonce`. Payload: `sub=<key_name>`, `iss=cdp`, `nbf/exp` (120-second window), `uri=METHOD api.coinbase.com/path` (no query string). Keys are EC P-256 PEM private keys from the Coinbase CDP portal under `organizations/{org_id}/apiKeys/{key_id}`. Note: the sandbox URL does not support Advanced Trade V3 endpoints — use `COINBASE_ENV=production`.
 
 **Configuration:**
 
 ```
-COINBASE_ENV=sandbox          # default; set to "production" to target live API
-                              # sandbox base: https://api-sandbox.coinbase.com
+COINBASE_ENV=production       # Advanced Trade V3 only exists on production URL
                               # production base: https://api.coinbase.com
-COINBASE_KEY_NAME=projects/{project_id}/apiKeys/{key_id}
-COINBASE_PRIVATE_KEY=<base64-encoded API secret from Coinbase portal>
+COINBASE_KEY_NAME=organizations/{org_id}/apiKeys/{key_id}
+COINBASE_PRIVATE_KEY=<EC P-256 PEM private key, \\n-escaped for .env>
 COINBASE_RATE_LIMIT_RPS=10
 SWEEP_MAX_SLIPPAGE_PCT=2.0
 ```

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 import json
 import logging
+import secrets
 import time
 import uuid
 from datetime import datetime, timezone
@@ -13,6 +11,7 @@ from typing import Any
 from uuid import UUID
 
 import httpx
+import jwt
 
 from gainsweep.protocols.sweep_venue import SweepEstimate, SweepResult, SweepVenue
 
@@ -145,20 +144,23 @@ class CoinbaseSweepVenue:
     # ── private helpers ───────────────────────────────────────────────────────
 
     def _auth_headers(self, method: str, path: str, body: str = "") -> dict[str, str]:
-        """HMAC-SHA256 auth for Coinbase Advanced Trade API (§5.7).
+        """CDP JWT (ES256) auth for Coinbase Advanced Trade API (§5.7).
 
-        Signature covers: timestamp + METHOD + path + body.
-        CB-ACCESS-KEY is the key UUID (last segment of the full key name).
+        kid and sub = api_key_name; uri = METHOD + host + path (no query string).
+        PEM key may arrive with literal \\n from .env — normalised here.
         """
-        timestamp = str(int(time.time()))
-        api_key_id = self._api_key_name.split("/")[-1]
-        message = timestamp + method.upper() + path + body
-        secret = base64.b64decode(self._api_secret)
-        signature = hmac.new(secret, message.encode("utf-8"), hashlib.sha256).hexdigest()
+        ts = int(time.time())
+        path_no_query = path.split("?")[0]
+        uri = f"{method.upper()} api.coinbase.com{path_no_query}"
+        pem_key = self._api_secret.replace("\\n", "\n")
+        token = jwt.encode(
+            {"sub": self._api_key_name, "iss": "cdp", "nbf": ts, "exp": ts + 120, "uri": uri},
+            pem_key,
+            algorithm="ES256",
+            headers={"kid": self._api_key_name, "nonce": secrets.token_hex()},
+        )
         return {
-            "CB-ACCESS-KEY": api_key_id,
-            "CB-ACCESS-SIGN": signature,
-            "CB-ACCESS-TIMESTAMP": timestamp,
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
 
